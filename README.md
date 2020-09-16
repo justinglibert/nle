@@ -1,4 +1,5 @@
 ![NetHack Learning Environment (NLE)](https://github.com/facebookresearch/nle/raw/master/dat/nle/logo.png)
+Fork for my thesis
 
 --------------------------------------------------------------------------------
 
