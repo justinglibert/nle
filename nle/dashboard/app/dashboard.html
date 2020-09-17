@@ -346,7 +346,7 @@
         console.log(`Fetching data for: ${runInfo[ttyrecField]}.`);
         // Append the promise for each ttyrec.
         ttyrecs[runInfo[ttyrecField]] =
-          fetch(`http://${host}/ttyrec_file` +
+          fetch(`https://${host}/ttyrec_file` +
                 `?datapath=${encodeURIComponent(runInfo[dataField])}` +
                 `&ttyrec=${encodeURIComponent(runInfo[ttyrecField])}`)
               .catch(function() {
@@ -377,7 +377,7 @@
      */
     async function fetchRunsInfoAndFiles(dataPath, runsToSearch, recursively) {
       const promise =
-        fetch(`http://${host}/runs_info` +
+        fetch(`https://${host}/runs_info` +
               `?path=${encodeURIComponent(dataPath)}` +
               `&readLast=${runsToSearch}` +
               `&recursively=${recursively}`)
