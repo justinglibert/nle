@@ -1,5 +1,6 @@
 // Copyright (c) Facebook, Inc. and its affiliates.
 const path = require('path');
+const cors = require('cors');
 const parse = require('csv-parse/lib/sync');
 const express = require('express');
 const readLastLines = require('read-last-lines');
@@ -11,6 +12,7 @@ const tmp = require('tmp');
 const config = require('./config');
 
 app = express();
+app.use(cors());
 app.use(compression({filter: () => true}));
 
 /** Filter empty lines or lines with empty fields.
@@ -70,6 +72,7 @@ async function getRunsInfo(dataPath, readLast, recursively) {
       name: dataFilePath.name,
       ext: '.zip',
     });
+	  console.log("Attempting to read", dataFile, statsFile);
 
     // Read and filter the last lines from each statsFile.
     // The factor 2 is necessary because this library counts every line as two.
@@ -185,15 +188,20 @@ app.get('/ttyrec_file', (req, res) => {
     }
     try {
       // need to unzip first into a temp dir
+console.log("unzipping", datapath)
       const datazip = new AdmZip(datapath);
+	    console.log(datazip.getEntries().map(e => e.entryName));
       const name = tmp.tmpNameSync();
-      datazip.extractEntryTo(ttyrecname, name + '/');
+	   console.log(ttyrecname, name);
+      datazip.extractEntryTo(ttyrecname.substring(1), name + '/');
+	    console.log("success")
       const temppath = name + '/' + ttyrecname;
       // send ttyrec over
       res.sendFile(temppath);
       console.log(`Serving ttyrec file: ${temppath}.`);
       // fs.unlinkSync(temppath);
     } catch (error) {
+      console.error("ttyrec error", error)
       if (error instanceof TypeError) {
         // File not found.
         res.status(404).send(
