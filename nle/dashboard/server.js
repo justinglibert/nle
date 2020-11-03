@@ -7,9 +7,10 @@ const readLastLines = require('read-last-lines');
 const compression = require('compression');
 const readdirp = require('readdirp');
 const clonedeep = require('lodash.clonedeep');
-const AdmZip = require('adm-zip');
 const tmp = require('tmp');
 const config = require('./config');
+const decompress = require('decompress');
+const decompressBzip2 = require('decompress-bzip2');
 
 app = express();
 app.use(cors());
@@ -27,7 +28,6 @@ function processLines(linesStr, recursively, statsFile, dataFile) {
       if (recursively) {
         line += `,${statsFile}`;
       }
-      line += `,${dataFile}`,
       kept.push(line);
     }
   }
@@ -57,10 +57,8 @@ async function getRunsInfo(dataPath, readLast, recursively) {
     statsFiles = statsFiles.map((statsFile) => statsFile.fullPath);
     console.log(`Stats files recursively found:\n${statsFiles}`);
     header.push('stats_file');
-    header.push('data_file');
   } else {
     statsFiles = [path.join(dataPath, config.data.stats)];
-    header.push('data_file');
   }
 
   // List of strings, each one containing a line.
@@ -166,39 +164,20 @@ app.get('/ttyrec_file', (req, res) => {
   // Accepted parameters:
   // - ttyrec: name of the ttyrec file.
   // - datapath: path to the zip file.
-  if (typeof req.query.datapath === 'undefined') {
-    res.status(400).send(
-        createErrorMessage(
-            400,
-            '/ttyrec_file',
-            `ttyrec: ${req.query.ttyrec}`,
-            `datapath: ${req.query.datapath}`,
-            'No path has been passed to /ttyrec_file.',
-        ),
-    );
-  } else {
     const ttyrecname = decodeURIComponent(req.query.ttyrec);
-    let datapath = decodeURIComponent(req.query.datapath);
-
-    if (!path.isAbsolute(datapath)) {
-      // Make filepath relative to this folder.
-      console.log(`Received a relative datapath: ${datapath}. ` +
-                  `Adding this folder as prefix.`);
-      datapath = path.join(__dirname, datapath);
-    }
     try {
       // need to unzip first into a temp dir
-console.log("unzipping", datapath)
-      const datazip = new AdmZip(datapath);
-	    console.log(datazip.getEntries().map(e => e.entryName));
-      const name = tmp.tmpNameSync();
-	   console.log(ttyrecname, name);
-      datazip.extractEntryTo(ttyrecname.substring(1), name + '/');
-	    console.log("success")
-      const temppath = name + '/' + ttyrecname;
-      // send ttyrec over
-      res.sendFile(temppath);
-      console.log(`Serving ttyrec file: ${temppath}.`);
+        console.log("unzipping", ttyrecname)
+          const name = tmp.tmpNameSync();
+        decompress(ttyrecname, name, {
+            plugins: [decompressBzip2({
+                'path': ttyrecname.split('/').pop().slice(0, -4)
+            })]
+        }).then(files => {
+            console.log("success")
+            // send ttyrec over
+            res.send(files[0].data);
+        })
       // fs.unlinkSync(temppath);
     } catch (error) {
       console.error("ttyrec error", error)
@@ -219,7 +198,6 @@ console.log("unzipping", datapath)
         console.log(error);
       }
     }
-  }
 });
 
 app.listen(config.serverPort).on('error', () => {

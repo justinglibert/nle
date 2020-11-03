@@ -2,7 +2,7 @@
 module.exports = {
   serverPort: 3000,
   data: {
-    defaultPath: '../../nle_data/',
+    defaultPath: '/home/ubuntu/torchbeast/latest',
     defaultRunsToRead: 100,
     stats: '*.csv',
   },
