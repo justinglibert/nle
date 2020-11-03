@@ -37,6 +37,16 @@ BLSTATS_SCORE_INDEX = 9
 
 SKIP_EXCEPTIONS = (b"eat", b"attack", b"direction?", b"pray")
 
+def _get(response, path="Blstats.score", default=None, required=False):
+    node = response
+    for attr in path.split("."):
+        attr = "".join(x.capitalize() for x in attr.split("_"))
+        node = getattr(node, attr)()
+        if node is None:
+            if required:
+                raise ValueError("%s not found in response, but required==True." % path)
+            return default
+        return node
 
 class NLE(gym.Env):
     """Standard NetHack Learning Environment.
@@ -81,7 +91,7 @@ class NLE(gym.Env):
             "exp_lev",
             "gold",
             "hunger",
-            # "killer_name",
+            "killer_name",
             "deepest_lev",
             "episode",
             "seeds",
@@ -171,8 +181,7 @@ class NLE(gym.Env):
                 logger.info("Not saving any NLE data.")
 
         # TODO: Fix stats_file logic.
-        # self._setup_statsfile = self.savedir is not None
-        self._setup_statsfile = False
+        self._setup_statsfile = self.savedir is not None
         self._stats_file = None
         self._stats_logger = None
 
@@ -200,6 +209,9 @@ class NLE(gym.Env):
             self._observation_keys.index(key) for key in observation_keys
         )
 
+        self._indices = tuple(
+            self._observation_keys.index(key) for key in self._observation_keys
+        )
         if self.savedir:
             self._ttyrec_pattern = os.path.join(
                 self.savedir, "nle.%i.%%i.ttyrec.bz2" % os.getpid()
@@ -288,6 +300,12 @@ class NLE(gym.Env):
             for key, i in zip(self._original_observation_keys, self._original_indices)
         }
 
+    def _get_complete_observation(self, observation):
+        return {
+            key: observation[i]
+            for key, i in zip(self._observation_keys, self._indices)
+        }
+        
     def print_action_meanings(self):
         for a_idx, a in enumerate(self._actions):
             print(a_idx, a)
@@ -337,37 +355,38 @@ class NLE(gym.Env):
         info = {}
         if end_status:
             # TODO: fix stats
-            # stats = self._collect_stats(last_observation, end_status)
-            # stats = stats._asdict()
-            stats = {}
+            stats = self._collect_stats(last_observation, end_status)
+            stats = stats._asdict()
             info["stats"] = stats
-
             if self._stats_logger is not None:
                 self._stats_logger.writerow(stats)
         info["end_status"] = end_status
 
         return self._get_observation(observation), reward, done, info
 
-    def _collect_stats(self, message, end_status):
+    def _collect_stats(self, observation, end_status):
         """Updates a stats dict tracking several env stats."""
         # Using class rather than instance to allow tasks to reuse this with
         # super()
-        # return NLE.Stats(
-        #     end_status=int(end_status),
-        #     score=_get(message, "Blstats.score", required=True),
-        #     time=_get(message, "Blstats.time", required=True),
-        #     steps=self._steps,
-        #     hp=_get(message, "Blstats.hitpoints", required=True),
-        #     exp=_get(message, "Blstats.experience_points", required=True),
-        #     exp_lev=_get(message, "Blstats.experience_level", required=True),
-        #     gold=_get(message, "Blstats.gold", required=True),
-        #     hunger=_get(message, "You.uhunger", required=True),
-        #     # killer_name=self._killer_name,
-        #     deepest_lev=_get(message, "Internal.deepest_lev_reached", required=True),
-        #     episode=self._episode,
-        #     seeds=self.get_seeds(),
-        #     ttyrec=self.env._process.filename,
-        # )
+        obs = self._get_complete_observation(observation)
+        seeds = self.get_seeds()
+        return NLE.Stats(
+            end_status=int(end_status),
+            score=obs["blstats"][9],
+            time=obs["blstats"][20],
+            steps=self._steps,
+            hp=obs["blstats"][10],
+            exp=obs["blstats"][19],
+            exp_lev=obs["blstats"][18],
+            gold=obs["blstats"][13],
+            hunger=obs["blstats"][21],
+            killer_name=obs["internal"][6],
+            deepest_lev=obs["internal"][0],
+            episode=self._episode,
+            seed_core=seeds[0],
+            seed_disp=seeds[1],
+            ttyrec=self.env._ttyrec,
+        )
 
     def _in_moveloop(self, observation):
         program_state = observation[self._program_state_index]
@@ -392,7 +411,8 @@ class NLE(gym.Env):
         # Only run on the first reset to initialize stats file
         if self._setup_statsfile:
             filename = os.path.join(self.savedir, "stats.csv")
-            add_header = not os.path.exists(filename)
+            #add_header = not os.path.exists(filename)
+            add_header = False # Headers are hardcoded in the dashboard
 
             self._stats_file = open(filename, "a", 1)  # line buffered.
             self._stats_logger = csv.DictWriter(
@@ -402,7 +422,7 @@ class NLE(gym.Env):
                 self._stats_logger.writeheader()
         self._setup_statsfile = False
 
-        # self._killer_name = "UNK"
+        self._killer_name = "UNK"
 
         self._steps = 0
 

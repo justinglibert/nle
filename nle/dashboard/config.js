@@ -21,7 +21,8 @@ module.exports = {
     'killer_name',
     'deepest_lev',
     'episode',
-    'seeds',
+    'seed_core',
+    'seed_disp',
     'ttyrec',
   ],
 };
