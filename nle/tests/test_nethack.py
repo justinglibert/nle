@@ -7,7 +7,7 @@ import numpy as np
 
 import pytest
 
-from nle import nethack
+from nle import nethack, _pynethack
 
 
 # MORE + compass directions + long compass directions.
@@ -247,6 +247,15 @@ class TestNethackSomeObs:
         assert internal[3] == 1  # xwaitforspace
 
 
+def get_object(name):
+    for index in range(nethack.NUM_OBJECTS):
+        obj = nethack.objclass(index)
+        if nethack.OBJ_NAME(obj) == name:
+            return obj
+    else:
+        raise ValueError("'%s' not found!" % name)
+
+
 class TestNethackFunctionsAndConstants:
     def test_permonst_and_class_sym(self):
         glyph = 155  # Lichen.
@@ -296,3 +305,82 @@ class TestNethackFunctionsAndConstants:
             % nethack.MAXMCLASSES,
         ):
             nethack.class_sym.from_mlet("\x7F")
+
+    def test_objclass(self):
+        obj = nethack.objclass(0)
+        assert nethack.OBJ_NAME(obj) == "strange object"
+
+        food_ration = get_object("food ration")
+        assert food_ration.oc_weight == 20
+
+        elven_dagger = get_object("elven dagger")
+        assert nethack.OBJ_DESCR(elven_dagger) == "runed dagger"
+
+    def test_objdescr(self):
+        od = nethack.objdescr.from_idx(0)
+        assert od.oc_name == "strange object"
+        assert od.oc_descr is None
+
+        elven_dagger = get_object("elven dagger")
+        od = nethack.objdescr.from_idx(elven_dagger.oc_name_idx)
+        assert od.oc_name == "elven dagger"
+        assert od.oc_descr == "runed dagger"
+
+        # Example of how to do this with glyphs.
+        glyph = nethack.GLYPH_OBJ_OFF + elven_dagger.oc_name_idx
+        idx = nethack.glyph_to_obj(glyph)
+        assert idx == elven_dagger.oc_name_idx
+        assert nethack.objdescr.from_idx(idx) is od
+
+
+class TestNethackGlanceObservation:
+    def test_new_observation_shapes(self):
+        game = nethack.Nethack()
+        game.reset()
+
+        screen_description_buff = game._obs_buffers["screen_descriptions"]
+        glyph_buff = game._obs_buffers["glyphs"]
+        glance_shape = screen_description_buff.shape
+        assert glyph_buff.shape == glance_shape[:2]
+        assert _pynethack.nethack.NLE_SCREEN_DESCRIPTION_LENGTH == glance_shape[-1]
+        assert len(glance_shape) == 3
+
+    def test_glance_descriptions(self):
+        game = nethack.Nethack(
+            playername="MonkBot-mon-hum-neu-mal",
+        )
+        game.reset()
+
+        # rather naughty - testing against private impl
+        glyph_buff = game._obs_buffers["glyphs"]
+        char_buff = game._obs_buffers["chars"]
+        desc_buff = game._obs_buffers["screen_descriptions"]
+
+        row, col = glyph_buff.shape
+        episodes = 6
+        for _ in range(episodes):
+            game.reset()
+            for i in range(row):
+                for j in range(col):
+                    glyph = glyph_buff[i][j]
+                    char = char_buff[i][j]
+                    letter = chr(char)
+                    glance = "".join(chr(c) for c in desc_buff[i][j] if c != 0)
+                    if char == 32:  # no text
+                        assert glance == ""
+                        assert (desc_buff[i][j] == 0).all()
+                    elif glyph == 2378 and letter == ".":
+                        assert glance == "floor of a room"
+                    elif glyph == 333 and letter == "@":  # us!
+                        assert glance == "human monk called MonkBot"
+                    elif glyph == 413:  # pet cat
+                        assert glance == "tame kitten"
+                    elif glyph == 397:  # pet dog
+                        assert glance == "tame little dog"
+                    elif letter in "-":  # illustrate same char, diff descrip
+                        if glyph == 2378:
+                            assert glance == "grave"
+                        elif glyph == 2363:
+                            assert glance == "wall"
+                        elif glyph == 2372:
+                            assert glance == "open door"

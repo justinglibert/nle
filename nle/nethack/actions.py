@@ -73,7 +73,7 @@ class MiscDirection(enum.IntEnum):
 
 
 class MiscAction(enum.IntEnum):
-    MORE = ord("\r")
+    MORE = ord("\r")  # read the next message
 
 
 class Command(enum.IntEnum):
@@ -93,9 +93,11 @@ class Command(enum.IntEnum):
     DROP = ord("d")  # drop an item
     DROPTYPE = ord("D")  # drop specific item types
     EAT = ord("e")  # eat something
+    ESC = C("[")  # escape from the current query/action
     ENGRAVE = ord("E")  # engrave writing on the floor
     ENHANCE = M("e")  # advance or check weapon and spell skills
     FIRE = ord("f")  # fire ammunition from quiver
+    FIGHT = ord("F")  # Prefix: force fight even if you don't see a monster
     FORCE = M("f")  # force a lock
     GLANCE = ord(";")  # show what type of thing a map symbol corresponds to
     HELP = ord("?")  # give a help message
@@ -110,6 +112,8 @@ class Command(enum.IntEnum):
     LOOK = ord(":")  # look at what is here
     LOOT = M("l")  # loot a box on the floor
     MONSTER = M("m")  # use monster's special ability
+    MOVE = ord("m")  # Prefix: move without picking up objects/fighting
+    MOVEFAR = ord("M")  # Prefix: run without picking up objects/fighting
     OFFER = M("o")  # offer a sacrifice to the gods
     OPEN = ord("o")  # open a door
     OPTIONS = ord("O")  # show option settings, possibly change them
@@ -127,6 +131,7 @@ class Command(enum.IntEnum):
     REMOVE = ord("R")  # remove an accessory (ring, amulet, etc)
     RIDE = M("R")  # mount or dismount a saddled steed
     RUB = M("r")  # rub a lamp or a stone
+    RUSH = ord("g")  # Prefix: rush until something interesting is seen
     SAVE = ord("S")  # save the game and exit
     SEARCH = ord("s")  # search for traps and secret doors
     SEEALL = ord("*")  # show all equipment in use
@@ -159,6 +164,37 @@ ACTIONS = tuple(
     + list(MiscAction)
     + list(Command)
 )
+
+NON_RL_ACTIONS = (
+    Command.ANNOTATE,  # Could potentially be useful.
+    Command.AUTOPICKUP,
+    Command.CONDUCT,  # Could potentially be useful.
+    Command.EXTCMD,  # Potentially useful for some wizard actions.
+    Command.EXTLIST,
+    Command.GLANCE,
+    Command.HELP,
+    Command.HISTORY,
+    Command.KNOWN,  # Could potentially be useful.
+    Command.KNOWNCLASS,  # Could potentially be useful.
+    Command.OPTIONS,
+    Command.OVERVIEW,  # Could potentially be useful.
+    Command.PREVMSG,  # Could potentially be useful.
+    Command.TELEPORT,
+    Command.QUIT,
+    Command.REDRAW,
+    Command.SAVE,
+    Command.SEEALL,  # Could potentially be useful.
+    Command.TRAVEL,  # Could potentially be useful.
+    Command.VERSION,
+    Command.WHATDOES,
+    Command.WHATIS,
+)
+
+_USEFUL_ACTIONS = list(ACTIONS)
+for action in NON_RL_ACTIONS:
+    _USEFUL_ACTIONS.remove(action)
+USEFUL_ACTIONS = tuple(_USEFUL_ACTIONS)
+del _USEFUL_ACTIONS
 
 _ACTIONS_DICT = {}
 for enum_class in [

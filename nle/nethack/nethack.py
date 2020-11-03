@@ -14,9 +14,17 @@ DLPATH = os.path.join(os.path.dirname(_pynethack.__file__), "libnethack.so")
 # TODO: Consider getting this from C++.
 DUNGEON_SHAPE = (21, 79)
 BLSTATS_SHAPE = (_pynethack.nethack.NLE_BLSTATS_SIZE,)
-MESSAGE_SHAPE = (256,)
+MESSAGE_SHAPE = (_pynethack.nethack.NLE_MESSAGE_SIZE,)
 PROGRAM_STATE_SHAPE = (_pynethack.nethack.NLE_PROGRAM_STATE_SIZE,)
 INTERNAL_SHAPE = (_pynethack.nethack.NLE_INTERNAL_SIZE,)
+INV_SIZE = (_pynethack.nethack.NLE_INVENTORY_SIZE,)
+INV_STRS_SHAPE = (
+    _pynethack.nethack.NLE_INVENTORY_SIZE,
+    _pynethack.nethack.NLE_INVENTORY_STR_LENGTH,
+)
+SCREEN_DESCRIPTIONS_SHAPE = DUNGEON_SHAPE + (
+    _pynethack.nethack.NLE_SCREEN_DESCRIPTION_LENGTH,
+)
 
 OBSERVATION_DESC = {
     "glyphs": dict(shape=DUNGEON_SHAPE, dtype=np.int16),
@@ -27,6 +35,11 @@ OBSERVATION_DESC = {
     "message": dict(shape=MESSAGE_SHAPE, dtype=np.uint8),
     "program_state": dict(shape=PROGRAM_STATE_SHAPE, dtype=np.int32),
     "internal": dict(shape=INTERNAL_SHAPE, dtype=np.int32),
+    "inv_glyphs": dict(shape=INV_SIZE, dtype=np.int16),
+    "inv_letters": dict(shape=INV_SIZE, dtype=np.uint8),
+    "inv_oclasses": dict(shape=INV_SIZE, dtype=np.uint8),
+    "inv_strs": dict(shape=INV_STRS_SHAPE, dtype=np.uint8),
+    "screen_descriptions": dict(shape=SCREEN_DESCRIPTIONS_SHAPE, dtype=np.uint8),
 }
 
 
@@ -48,13 +61,16 @@ NETHACKOPTIONS = [
 ]
 
 HACKDIR = os.getenv("HACKDIR", pkg_resources.resource_filename("nle", "nethackdir"))
+WIZKIT_FNAME = "wizkit.txt"
 
 
-def _set_env_vars(options, hackdir):
+def _set_env_vars(options, hackdir, wizkit=None):
     # TODO: Investigate not using environment variables for this.
     os.environ["NETHACKOPTIONS"] = ",".join(options)
     os.environ["HACKDIR"] = hackdir
     os.environ["TERM"] = os.environ.get("TERM", "screen")
+    if wizkit is not None:
+        os.environ["WIZKIT"] = wizkit
 
 
 # TODO: Not thread-safe for many reasons.
@@ -68,24 +84,27 @@ class Nethack:
         self,
         observation_keys=OBSERVATION_DESC.keys(),
         playername="Agent-mon-hum-neu-mal",
-        ttyrec="nle.ttyrec",
+        ttyrec="nle.ttyrec.bz2",
         options=None,
         copy=False,
         wizard=False,
+        hackdir=HACKDIR,
     ):
         self._copy = copy
 
-        if not os.path.exists(HACKDIR) or not os.path.exists(
-            os.path.join(HACKDIR, "sysconf")
+        if not os.path.exists(hackdir) or not os.path.exists(
+            os.path.join(hackdir, "sysconf")
         ):
-            raise FileNotFoundError("Couldn't find NetHack installation.")
+            raise FileNotFoundError(
+                "Couldn't find NetHack installation at '%s'." % hackdir
+            )
 
         # Create a HACKDIR for us.
         self._vardir = tempfile.mkdtemp(prefix="nle")
 
         # Symlink a few files.
         for fn in ["nhdat", "sysconf"]:
-            os.symlink(os.path.join(HACKDIR, fn), os.path.join(self._vardir, fn))
+            os.symlink(os.path.join(hackdir, fn), os.path.join(self._vardir, fn))
         # Touch a few files.
         for fn in ["perm", "logfile", "xlogfile"]:
             os.close(os.open(os.path.join(self._vardir, fn), os.O_CREAT))
@@ -100,6 +119,7 @@ class Nethack:
         self._options = list(options) + ["name:" + playername]
         if wizard:
             self._options.append("playmode:debug")
+        self._wizard = wizard
 
         _set_env_vars(self._options, self._vardir)
         self._ttyrec = ttyrec
@@ -125,8 +145,20 @@ class Nethack:
         self._pynethack.step(action)
         return self._step_return(), self._pynethack.done()
 
-    def reset(self, new_ttyrec=None):
-        _set_env_vars(self._options, self._vardir)
+    def _write_wizkit_file(self, wizkit_items):
+        # TODO ideally we need to check the validity of the requested items
+        with open(os.path.join(self._vardir, WIZKIT_FNAME), "w") as f:
+            for item in wizkit_items:
+                f.write(f"{item}\n")
+
+    def reset(self, new_ttyrec=None, wizkit_items=None):
+        if wizkit_items is not None:
+            if not self._wizard:
+                raise ValueError("Set wizard=True to use the wizkit option.")
+            self._write_wizkit_file(wizkit_items)
+            _set_env_vars(self._options, self._vardir, wizkit=WIZKIT_FNAME)
+        else:
+            _set_env_vars(self._options, self._vardir)
         if new_ttyrec is None:
             self._pynethack.reset()
         else:

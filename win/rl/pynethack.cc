@@ -26,6 +26,7 @@ extern "C" {
 #undef max
 
 namespace py = pybind11;
+using namespace py::literals;
 
 template <typename T>
 T *
@@ -33,7 +34,7 @@ checked_conversion(py::object obj, const std::vector<ssize_t> &shape)
 {
     if (obj.is_none())
         return nullptr;
-    auto array = py::array::ensure(obj.release());
+    py::array array = py::array::ensure(obj.release());
     if (!array)
         throw std::runtime_error("Numpy array required");
 
@@ -112,22 +113,48 @@ class Nethack
     void
     set_buffers(py::object glyphs, py::object chars, py::object colors,
                 py::object specials, py::object blstats, py::object message,
-                py::object program_state, py::object internal)
+                py::object program_state, py::object internal,
+                py::object inv_glyphs, py::object inv_letters,
+                py::object inv_oclasses, py::object inv_strs,
+                py::object screen_descriptions)
     {
         std::vector<ssize_t> dungeon{ ROWNO, COLNO - 1 };
-        obs_.glyphs = checked_conversion<int16_t>(std::move(glyphs), dungeon);
-        obs_.chars = checked_conversion<uint8_t>(std::move(chars), dungeon);
-        obs_.colors = checked_conversion<uint8_t>(std::move(colors), dungeon);
-        obs_.specials =
-            checked_conversion<uint8_t>(std::move(specials), dungeon);
-        obs_.blstats = checked_conversion<long>(std::move(blstats),
-                                                { NLE_BLSTATS_SIZE });
-        obs_.message =
-            checked_conversion<uint8_t>(std::move(message), { 256 });
+        obs_.glyphs = checked_conversion<int16_t>(glyphs, dungeon);
+        obs_.chars = checked_conversion<uint8_t>(chars, dungeon);
+        obs_.colors = checked_conversion<uint8_t>(colors, dungeon);
+        obs_.specials = checked_conversion<uint8_t>(specials, dungeon);
+        obs_.blstats =
+            checked_conversion<long>(blstats, { NLE_BLSTATS_SIZE });
+        obs_.message = checked_conversion<uint8_t>(message, { 256 });
         obs_.program_state = checked_conversion<int>(
             std::move(program_state), { NLE_PROGRAM_STATE_SIZE });
-        obs_.internal = checked_conversion<int>(std::move(internal),
-                                                { NLE_INTERNAL_SIZE });
+        obs_.internal =
+            checked_conversion<int>(internal, { NLE_INTERNAL_SIZE });
+        obs_.inv_glyphs =
+            checked_conversion<int16_t>(inv_glyphs, { NLE_INVENTORY_SIZE });
+        obs_.inv_letters =
+            checked_conversion<uint8_t>(inv_letters, { NLE_INVENTORY_SIZE });
+        obs_.inv_oclasses =
+            checked_conversion<uint8_t>(inv_oclasses, { NLE_INVENTORY_SIZE });
+        obs_.inv_strs = checked_conversion<uint8_t>(
+            inv_strs, { NLE_INVENTORY_SIZE, NLE_INVENTORY_STR_LENGTH });
+        obs_.screen_descriptions = checked_conversion<uint8_t>(
+            screen_descriptions,
+            { ROWNO, COLNO - 1, NLE_SCREEN_DESCRIPTION_LENGTH });
+
+        py_buffers_ = { std::move(glyphs),
+                        std::move(chars),
+                        std::move(colors),
+                        std::move(specials),
+                        std::move(blstats),
+                        std::move(message),
+                        std::move(program_state),
+                        std::move(internal),
+                        std::move(inv_glyphs),
+                        std::move(inv_letters),
+                        std::move(inv_oclasses),
+                        std::move(inv_strs),
+                        std::move(screen_descriptions) };
     }
 
     void
@@ -196,6 +223,7 @@ class Nethack
 
     std::string dlpath_;
     nle_obs obs_;
+    std::vector<py::object> py_buffers_;
     nle_seeds_init_t seed_init_;
     bool use_seed_init = false;
     nle_ctx_t *nle_ = nullptr;
@@ -218,11 +246,12 @@ PYBIND11_MODULE(_pynethack, m)
              py::arg("colors") = py::none(), py::arg("specials") = py::none(),
              py::arg("blstats") = py::none(), py::arg("message") = py::none(),
              py::arg("program_state") = py::none(),
-             py::arg("internal") = py::none(), py::keep_alive<1, 2>(),
-             py::keep_alive<1, 3>(), py::keep_alive<1, 4>(),
-             py::keep_alive<1, 5>(), py::keep_alive<1, 6>(),
-             py::keep_alive<1, 7>(), py::keep_alive<1, 8>(),
-             py::keep_alive<1, 9>())
+             py::arg("internal") = py::none(),
+             py::arg("inv_glyphs") = py::none(),
+             py::arg("inv_letters") = py::none(),
+             py::arg("inv_oclasses") = py::none(),
+             py::arg("inv_strs") = py::none(),
+             py::arg("screen_descriptions") = py::none())
         .def("close", &Nethack::close)
         .def("set_initial_seeds", &Nethack::set_initial_seeds)
         .def("set_seeds", &Nethack::set_seeds)
@@ -233,11 +262,19 @@ PYBIND11_MODULE(_pynethack, m)
         "nethack", "Collection of NetHack constants and functions");
 
     /* NLE specific constants. */
+    mn.attr("NLE_MESSAGE_SIZE") = py::int_(NLE_MESSAGE_SIZE);
     mn.attr("NLE_BLSTATS_SIZE") = py::int_(NLE_BLSTATS_SIZE);
     mn.attr("NLE_PROGRAM_STATE_SIZE") = py::int_(NLE_PROGRAM_STATE_SIZE);
     mn.attr("NLE_INTERNAL_SIZE") = py::int_(NLE_INTERNAL_SIZE);
+    mn.attr("NLE_INVENTORY_SIZE") = py::int_(NLE_INVENTORY_SIZE);
+    mn.attr("NLE_INVENTORY_STR_LENGTH") = py::int_(NLE_INVENTORY_STR_LENGTH);
+    mn.attr("NLE_SCREEN_DESCRIPTION_LENGTH") =
+        py::int_(NLE_SCREEN_DESCRIPTION_LENGTH);
 
-    /* NetHack constants specific constants. */
+    /* NetHack constants. */
+    mn.attr("ROWNO") = py::int_(ROWNO);
+    mn.attr("COLNO") = py::int_(COLNO);
+
     mn.attr("NHW_MESSAGE") = py::int_(NHW_MESSAGE);
     mn.attr("NHW_STATUS") = py::int_(NHW_STATUS);
     mn.attr("NHW_MAP") = py::int_(NHW_MAP);
@@ -340,20 +377,20 @@ PYBIND11_MODULE(_pynethack, m)
     mn.def("glyph_is_warning",
            [](int glyph) { return glyph_is_warning(glyph); });
 
-    py::class_<permonst>(mn, "permonst")
-        .def(
-            "__init__",
-            [](py::detail::value_and_holder &v_h, int index) {
-                if (index < 0 || index >= NUMMONS)
-                    throw std::out_of_range(
-                        "Index should be between 0 and NUMMONS ("
-                        + std::to_string(NUMMONS) + ") but got "
-                        + std::to_string(index));
-                v_h.value_ptr() = &mons[index];
-                v_h.inst->owned = false;
-                v_h.set_holder_constructed(true);
-            },
-            py::detail::is_new_style_constructor())
+    py::class_<permonst>(mn, "permonst", "The permonst struct.")
+        .def("__init__",
+             // See https://github.com/pybind/pybind11/issues/2394
+             [](py::detail::value_and_holder &v_h, int index) {
+                 if (index < 0 || index >= NUMMONS)
+                     throw std::out_of_range(
+                         "Index should be between 0 and NUMMONS ("
+                         + std::to_string(NUMMONS) + ") but got "
+                         + std::to_string(index));
+                 v_h.value_ptr() = &mons[index];
+                 v_h.inst->owned = false;
+                 v_h.set_holder_constructed(true);
+             },
+             py::detail::is_new_style_constructor())
         .def_readonly("mname", &permonst::mname)   /* full name */
         .def_readonly("mlet", &permonst::mlet)     /* symbol */
         .def_readonly("mlevel", &permonst::mlevel) /* base monster level */
@@ -400,7 +437,7 @@ PYBIND11_MODULE(_pynethack, m)
         .def_readonly("name", &class_sym::name)
         .def_readonly("explain", &class_sym::explain)
         .def("__repr__", [](const class_sym &cs) {
-            return "<nethack.pynle.class_sym sym='" + std::string(1, cs.sym)
+            return "<nethack.class_sym sym='" + std::string(1, cs.sym)
                    + "' explain='" + std::string(cs.explain) + "'>";
         });
 
@@ -412,4 +449,82 @@ PYBIND11_MODULE(_pynethack, m)
            [](int glyph) { return glyph_to_swallow(glyph); });
     mn.def("glyph_to_warning",
            [](int glyph) { return glyph_to_warning(glyph); });
+
+    py::class_<objclass>(
+        mn, "objclass",
+        "The objclass struct.\n\n"
+        "All fields are constant and don't reflect user changes.")
+        .def("__init__",
+             // See https://github.com/pybind/pybind11/issues/2394
+             [](py::detail::value_and_holder &v_h, int i) {
+                 if (i < 0 || i >= NUM_OBJECTS)
+                     throw std::out_of_range(
+                         "Index should be between 0 and NUM_OBJECTS ("
+                         + std::to_string(NUM_OBJECTS) + ") but got "
+                         + std::to_string(i));
+
+                 /* Initialize. Cannot depend on o_init.c as it pulls
+                  * in all kinds of other code. Instead, do what
+                  * makedefs.c does at set it here.
+                  * Alternative: Get the pointer from the game itself?
+                  * Dangerous!
+                  */
+                 objects[i].oc_name_idx = objects[i].oc_descr_idx = i;
+
+                 v_h.value_ptr() = &objects[i];
+                 v_h.inst->owned = false;
+                 v_h.set_holder_constructed(true);
+             },
+             py::detail::is_new_style_constructor())
+        .def_readonly("oc_name_idx",
+                      &objclass::oc_name_idx) /* index of actual name */
+        .def_readonly(
+            "oc_descr_idx",
+            &objclass::oc_descr_idx) /* description when name unknown */
+        .def_readonly(
+            "oc_oprop",
+            &objclass::oc_oprop) /* property (invis, &c.) conveyed */
+        .def_readonly(
+            "oc_class",
+            &objclass::oc_class) /* object class (enum obj_class_types) */
+        .def_readonly(
+            "oc_delay",
+            &objclass::oc_delay) /* delay when using such an object */
+        .def_readonly("oc_color",
+                      &objclass::oc_color) /* color of the object */
+
+        .def_readonly("oc_prob",
+                      &objclass::oc_prob) /* probability, used in mkobj() */
+        .def_readonly("oc_weight",
+                      &objclass::oc_weight) /* encumbrance (1 cn = 0.1 lb.) */
+        .def_readonly("oc_cost", &objclass::oc_cost) /* base cost in shops */
+        /* And much more, see objclass.h. */;
+
+    mn.def("OBJ_NAME", [](const objclass &obj) { return OBJ_NAME(obj); });
+    mn.def("OBJ_DESCR", [](const objclass &obj) { return OBJ_DESCR(obj); });
+
+    py::class_<objdescr>(mn, "objdescr")
+        .def_static(
+            "from_idx",
+            [](int idx) -> const objdescr * {
+                if (idx < 0 || idx >= NUM_OBJECTS)
+                    throw std::out_of_range(
+                        "Argument should be between 0 and NUM_OBJECTS ("
+                        + std::to_string(NUM_OBJECTS) + ") but got "
+                        + std::to_string(idx));
+                return &obj_descr[idx];
+            },
+            py::return_value_policy::reference)
+        .def_readonly("oc_name", &objdescr::oc_name)
+        .def_readonly("oc_descr", &objdescr::oc_descr)
+        .def("__repr__", [](const objdescr &od) {
+            // clang-format doesn't like the _s UDL.
+            // clang-format off
+            return "<nethack.objdescr oc_name={!r} oc_descr={!r}>"_s
+                // clang-format on
+                .format(od.oc_name ? py::str(od.oc_name)
+                                   : py::object(py::none()),
+                        od.oc_descr ? py::str(od.oc_descr)
+                                    : py::object(py::none()));
+        });
 }

@@ -2,7 +2,10 @@
 #
 # Copyright (c) Facebook, Inc. and its affiliates.
 import argparse
+import bz2
+import gzip
 import os
+import re
 import select
 import struct
 import termios
@@ -71,12 +74,12 @@ def wait(diff, speed, drift=0.0):
     return speed, drift, jump
 
 
-def read_header(fd, peek=False, no_input=False):
+def read_header(f, peek=False, no_input=False):
     while True:
         if no_input:
-            header = os.read(fd, 12)
+            header = f.read(12)
         else:
-            header = os.read(fd, 13)
+            header = f.read(13)
 
         if not header:
             if peek:
@@ -97,10 +100,10 @@ def read_header(fd, peek=False, no_input=False):
         yield timestamp, length, channel
 
 
-CLRCODE = b"\033[2J"
+CLRCODE = re.compile(rb"\033\[2?J")  # https://stackoverflow.com/a/37778152/1136208
 
 
-def process(fd):
+def process(f):
     speed = FLAGS.speed
     drift = 0.0
     prev = None
@@ -114,9 +117,9 @@ def process(fd):
     frame = 0
 
     for timestamp, length, channel in read_header(
-        fd, peek=FLAGS.peek, no_input=FLAGS.no_input
+        f, peek=FLAGS.peek, no_input=FLAGS.no_input
     ):
-        data = os.read(fd, length)
+        data = f.read(length)
         frame += 1
 
         if frame < FLAGS.start:
@@ -128,13 +131,12 @@ def process(fd):
         if jump == 0 and prev is not None:
             speed, drift, jump = wait(timestamp - prev, speed, drift)
 
-        offset = data.find(CLRCODE)
-        if offset >= 0:
+        if CLRCODE.search(data):
             clrscreen.append((lastpos, prev))
             if jump > 0:
                 jump = 0
 
-        lastpos = os.lseek(fd, 0, os.SEEK_CUR)
+        lastpos = f.seek(0, os.SEEK_CUR)
 
         prev = timestamp
 
@@ -151,7 +153,7 @@ def process(fd):
             if lastpos:
                 prev = timestamp
 
-            os.lseek(fd, lastpos, os.SEEK_SET)
+            f.seek(lastpos, os.SEEK_SET)
             continue
 
         os.write(1, data)
@@ -165,10 +167,14 @@ def main():
     FLAGS = parser.parse_args()
 
     if FLAGS.filename == "-":
-        fd = os.dup(0)
+        f = os.fdopen(os.dup(0), "rb")
         os.dup2(1, 0)
+    elif os.path.splitext(FLAGS.filename)[1] in (".bz2", ".bzip2"):
+        f = bz2.BZ2File(FLAGS.filename)
+    elif os.path.splitext(FLAGS.filename)[1] in (".gz", ".gzip"):
+        f = gzip.GzipFile(FLAGS.filename)
     else:
-        fd = os.open(FLAGS.filename, os.O_RDONLY)
+        f = open(FLAGS.filename, "rb")
 
     old = termios.tcgetattr(0)
     new = termios.tcgetattr(0)
@@ -180,15 +186,15 @@ def main():
     try:
         if FLAGS.peek:
             # Skip all previous data.
-            for _, length, _ in read_header(fd, peek=False):
-                os.lseek(fd, length, os.SEEK_CUR)
+            for _, length, _ in read_header(f, peek=False):
+                f.seek(length, os.SEEK_CUR)
             FLAGS.no_wait = True
-        process(fd)
+        process(f)
     except KeyboardInterrupt:
         pass
     finally:
         termios.tcsetattr(0, termios.TCSANOW, old)
-        os.close(fd)
+        f.close()
 
 
 if __name__ == "__main__":

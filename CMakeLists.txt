@@ -37,7 +37,7 @@ set(PYTHON_SRC_PARENT
     CACHE STRING "Directory containing the nle package files")
 
 set(HACKDIR
-    "$ENV{HOME}/nethackdir"
+    "$ENV{HOME}/nethackdir.nle"
     CACHE STRING "Configuration files for nethack")
 
 message(STATUS "HACKDIR set to: ${HACKDIR}")
@@ -59,6 +59,7 @@ set(NLE_SRC ${nle_SOURCE_DIR}/src)
 set(NLE_INC ${nle_SOURCE_DIR}/include)
 set(NLE_DAT ${nle_SOURCE_DIR}/dat)
 set(NLE_UTIL ${nle_SOURCE_DIR}/util)
+set(NLE_DOC ${nle_SOURCE_DIR}/doc)
 
 set(NLE_SRC_GEN ${nle_BINARY_DIR}/src)
 set(NLE_INC_GEN ${nle_BINARY_DIR}/include)
@@ -92,7 +93,7 @@ target_link_directories(nethack PUBLIC /usr/local/lib)
 
 # On Ubuntu 20.04, libncurses6 seems to cause a SEGFAULT on tgetent?
 find_library(NCURSES_LIB NAMES libncurses.so.5 libncurses ncurses)
-target_link_libraries(nethack PUBLIC m fcontext ${NCURSES_LIB})
+target_link_libraries(nethack PUBLIC m fcontext ${NCURSES_LIB} bz2)
 
 # dlopen wrapper library
 add_library(nethackdl STATIC "sys/unix/nledl.c")
@@ -109,7 +110,7 @@ add_dependencies(rlmain util) # For pm.h.
 # pybind11 python library.
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/third_party/pybind11)
 pybind11_add_module(_pynethack win/rl/pynethack.cc src/monst.c src/decl.c
-                    src/drawing.c)
+                    src/drawing.c src/objects.c)
 target_link_libraries(_pynethack PUBLIC nethackdl)
 set_target_properties(_pynethack PROPERTIES CXX_STANDARD 14)
 target_include_directories(_pynethack PUBLIC ${NLE_INC_GEN})

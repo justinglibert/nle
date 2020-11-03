@@ -31,15 +31,11 @@ ASCII_y = ord("y")
 ASCII_n = ord("n")
 ASCII_ESC = nethack.C("[")
 
-FULL_ACTIONS = list(nethack.ACTIONS)
-# Removing some problematic actions
-FULL_ACTIONS.remove(nethack.Command.SAVE)
-# TODO: consider re-adding help eventually, when we can handle its state machine
-# and output.
-FULL_ACTIONS.remove(nethack.Command.HELP)
-FULL_ACTIONS = tuple(FULL_ACTIONS)
+FULL_ACTIONS = nethack.USEFUL_ACTIONS
 
 BLSTATS_SCORE_INDEX = 9
+
+SKIP_EXCEPTIONS = (b"eat", b"attack", b"direction?", b"pray")
 
 
 class NLE(gym.Env):
@@ -106,10 +102,16 @@ class NLE(gym.Env):
             "specials",
             "blstats",
             "message",
+            "inv_glyphs",
+            "inv_strs",
+            "inv_letters",
+            "inv_oclasses",
+            "screen_descriptions",
         ),
         actions=None,
         options=None,
         wizard=False,
+        allow_all_yn_questions=False,
     ):
         """Constructs a new NLE environment.
 
@@ -129,10 +131,16 @@ class NLE(gym.Env):
             options (list): list of game options to initialize Nethack. If None,
                 Nethack will be initialized with the options found in
                 ``nle.nethack.NETHACKOPTIONS`. Defaults to None.
+            wizard (bool): activate wizard mode. Defaults to False.
+            allow_all_yn_questions (bool):
+                If set to True, no y/n questions in step() are declined.
+                If set to False, only elements of SKIP_EXCEPTIONS are not declined.
+                Defaults to False.
         """
 
         self.character = character
         self._max_episode_steps = max_episode_steps
+        self._allow_all_yn_questions = allow_all_yn_questions
 
         if actions is None:
             actions = FULL_ACTIONS
@@ -194,7 +202,7 @@ class NLE(gym.Env):
 
         if self.savedir:
             self._ttyrec_pattern = os.path.join(
-                self.savedir, "nle.%i.%%i.ttyrec" % os.getpid()
+                self.savedir, "nle.%i.%%i.ttyrec.bz2" % os.getpid()
             )
             ttyrec = self._ttyrec_pattern % 0
         else:
@@ -216,28 +224,55 @@ class NLE(gym.Env):
 
         space_dict = {
             "glyphs": gym.spaces.Box(
-                low=0, high=nethack.MAX_GLYPH, shape=DUNGEON_SHAPE, dtype=np.int16
+                low=0, high=nethack.MAX_GLYPH, **nethack.OBSERVATION_DESC["glyphs"]
             ),
             "chars": gym.spaces.Box(
-                low=0, high=255, shape=DUNGEON_SHAPE, dtype=np.uint8
+                low=0, high=255, **nethack.OBSERVATION_DESC["chars"]
             ),
             "colors": gym.spaces.Box(
-                low=0, high=15, shape=DUNGEON_SHAPE, dtype=np.uint8
+                low=0, high=15, **nethack.OBSERVATION_DESC["colors"]
             ),
             "specials": gym.spaces.Box(
-                low=0, high=255, shape=DUNGEON_SHAPE, dtype=np.uint8
+                low=0, high=255, **nethack.OBSERVATION_DESC["specials"]
             ),
             "blstats": gym.spaces.Box(
                 low=np.iinfo(np.int32).min,
                 high=np.iinfo(np.int32).max,
-                shape=nethack.BLSTATS_SHAPE,
-                dtype=np.int32,
+                **nethack.OBSERVATION_DESC["blstats"],
             ),
             "message": gym.spaces.Box(
                 low=np.iinfo(np.uint8).min,
                 high=np.iinfo(np.uint8).max,
-                shape=nethack.MESSAGE_SHAPE,
-                dtype=np.uint8,
+                **nethack.OBSERVATION_DESC["message"],
+            ),
+            "program_state": gym.spaces.Box(
+                low=np.iinfo(np.int32).min,
+                high=np.iinfo(np.int32).max,
+                **nethack.OBSERVATION_DESC["program_state"],
+            ),
+            "internal": gym.spaces.Box(
+                low=np.iinfo(np.int32).min,
+                high=np.iinfo(np.int32).max,
+                **nethack.OBSERVATION_DESC["internal"],
+            ),
+            "inv_glyphs": gym.spaces.Box(
+                low=0,
+                high=nethack.MAX_GLYPH,
+                **nethack.OBSERVATION_DESC["inv_glyphs"],
+            ),
+            "inv_strs": gym.spaces.Box(
+                low=0, high=127, **nethack.OBSERVATION_DESC["inv_strs"]
+            ),
+            "inv_letters": gym.spaces.Box(
+                low=0, high=127, **nethack.OBSERVATION_DESC["inv_letters"]
+            ),
+            "inv_oclasses": gym.spaces.Box(
+                low=0,
+                high=nethack.MAXOCLASSES,
+                **nethack.OBSERVATION_DESC["inv_oclasses"],
+            ),
+            "screen_descriptions": gym.spaces.Box(
+                low=0, high=127, **nethack.OBSERVATION_DESC["screen_descriptions"]
             ),
         }
 
@@ -252,6 +287,10 @@ class NLE(gym.Env):
             key: observation[i]
             for key, i in zip(self._original_observation_keys, self._original_indices)
         }
+
+    def print_action_meanings(self):
+        for a_idx, a in enumerate(self._actions):
+            print(a_idx, a)
 
     def step(self, action: int):
         """Steps the environment.
@@ -274,7 +313,9 @@ class NLE(gym.Env):
         last_observation = tuple(a.copy() for a in self.last_observation)
 
         observation, done = self.env.step(self._actions[action])
-        observation, done = self._perform_known_steps(observation, done)
+        observation, done = self._perform_known_steps(
+            observation, done, exceptions=True
+        )
 
         self._steps += 1
 
@@ -332,7 +373,7 @@ class NLE(gym.Env):
         program_state = observation[self._program_state_index]
         return program_state[3]  # in_moveloop
 
-    def reset(self):
+    def reset(self, wizkit_items=None):
         """Resets the environment.
 
         Note:
@@ -346,7 +387,7 @@ class NLE(gym.Env):
         """
         self._episode += 1
         new_ttyrec = self._ttyrec_pattern % self._episode if self.savedir else None
-        self.last_observation = self.env.reset(new_ttyrec)
+        self.last_observation = self.env.reset(new_ttyrec, wizkit_items=wizkit_items)
 
         # Only run on the first reset to initialize stats file
         if self._setup_statsfile:
@@ -380,7 +421,7 @@ class NLE(gym.Env):
             warnings.warn(
                 "Not in moveloop after 1000 tries, aborting (ttyrec: %s)." % new_ttyrec
             )
-            return self.reset()
+            return self.reset(wizkit_items=wizkit_items)
 
         return self._get_observation(self.last_observation)
 
@@ -438,6 +479,20 @@ class NLE(gym.Env):
             message_index = self._observation_keys.index("message")
             message = bytes(self.last_observation[message_index])
             print(message[: message.index(b"\0")])
+            try:
+                inv_strs_index = self._observation_keys.index("inv_strs")
+                inv_letters_index = self._observation_keys.index("inv_letters")
+
+                inv_strs = self.last_observation[inv_strs_index]
+                inv_letters = self.last_observation[inv_letters_index]
+                for letter, line in zip(inv_letters, inv_strs):
+                    if np.all(line == 0):
+                        break
+                    print(
+                        letter.tobytes().decode("utf-8"), line.tobytes().decode("utf-8")
+                    )
+            except ValueError:  # inv_strs/letters not used.
+                pass
             colors_index = self._observation_keys.index("colors")
             chars = self.last_observation[chars_index]
             colors = self.last_observation[colors_index]
@@ -506,9 +561,13 @@ class NLE(gym.Env):
                 if exceptions:
                     # This causes an annoying unnecessary copy...
                     msg = bytes(observation[self._message_index])
-                    # Allow agent to select stuff to eat, attack, and to
-                    # select directions.
-                    if b"eat" in msg or b"attack" in msg or b"direction?" in msg:
+                    # Do not skip some questions to allow agent to select
+                    # stuff to eat, attack, and to select directions.
+
+                    # do not skip if all allowed or the allowed message appears
+                    if self._allow_all_yn_questions or any(
+                        el in msg for el in SKIP_EXCEPTIONS
+                    ):
                         break
 
                 # Otherwise, auto-decline.

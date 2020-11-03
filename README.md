@@ -3,10 +3,8 @@ Fork for my thesis
 
 --------------------------------------------------------------------------------
 
-The NetHack Learning Environment (NLE) is a Reinforcement Learning environment
-based on [NetHack 3.6.6](https://github.com/NetHack/NetHack/tree/NetHack-3.6.6_PostRelease).
-NLE is designed to provide a standard RL interface to the game, and comes with
-tasks that function as a first step to evaluate agents on this new environment.
+The NetHack Learning Environment (NLE) is a Reinforcement Learning environment presented at [NeurIPS 2020](https://neurips.cc/Conferences/2020).
+NLE is based on [NetHack 3.6.6](https://github.com/NetHack/NetHack/tree/NetHack-3.6.6_PostRelease) and designed to provide a standard RL interface to the game, and comes with tasks that function as a first step to evaluate agents on this new environment.
 
 NetHack is one of the oldest and arguably most impactful videogames in history,
 as well as being one of the hardest roguelikes currently being played by humans.
@@ -16,8 +14,7 @@ being much cheaper to run compared to other challenging testbeds. Through NLE,
 we wish to establish NetHack as one of the next challenges for research in
 decision making and machine learning.
 
-You can read more about NLE in the [arXiv
-preprint](https://arxiv.org/abs/2006.13760), and about NetHack in its [original
+You can read more about NLE in the [NeurIPS 2020 paper](https://arxiv.org/abs/2006.13760), and about NetHack in its [original
 README](./README.nh), at [nethack.org](https://nethack.org/), and on the
 [NetHack wiki](https://nethackwiki.com).
 
@@ -32,27 +29,23 @@ with other gym / RL environments.
 
 ## Installation
 
-NLE requires `python>=3.7`, `cmake>=3.12`, `libzmq`, `flatbuffers`, and some
-NetHack dependencies (e.g. `libncurses`) to be installed and available both when
-building the package, and at runtime.
-
+NLE requires `python>=3.7`, `cmake>=3.14` and some NetHack dependencies
+(e.g. `libncurses`) to be installed and available both when building the
+package, and at runtime.
 
 On **MacOS**, one can use `Homebrew` as follows:
 
 ``` bash
-$ brew install ncurses flatbuffers zeromq cmake
-$ sudo wget https://raw.githubusercontent.com/zeromq/cppzmq/v4.3.0/zmq.hpp -P \
-     /usr/local/include
+$ brew install ncurses cmake
 ```
 
-On a plain **Ubuntu 18.04** distribution, `cmake`, `flatbuffers` and other
-dependencies can be installed by doing:
+On a plain **Ubuntu 18.04** distribution, `cmake` and other dependencies
+can be installed by doing:
 
 ```bash
-# zmq, python, and most build deps
+# Python and most build deps
 $ sudo apt-get install -y build-essential autoconf libtool pkg-config \
-    python3-dev python3-pip python3-numpy git libncurses5-dev \
-    libzmq3-dev flex bison
+    python3-dev python3-pip python3-numpy git libncurses5-dev flex bison libbz2-dev
 
 # recent cmake version
 $ wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | sudo apt-key add -
@@ -60,13 +53,6 @@ $ sudo apt-add-repository 'deb https://apt.kitware.com/ubuntu/ bionic main'
 $ sudo apt-get update && apt-get --allow-unauthenticated install -y \
     cmake \
     kitware-archive-keyring
-
-# building flatbuffers
-$ git clone https://github.com/google/flatbuffers.git
-$ cd flatbuffers
-$ cmake -G "Unix Makefiles"
-$ make
-$ sudo make install
 ```
 
 Afterwards it's a matter of setting up your environment. We advise using a conda
@@ -75,7 +61,6 @@ environment for this:
 ```bash
 $ conda create -n nle python=3.8
 $ conda activate nle
-$ conda install cppzmq  # might not be necessary on some systems
 $ pip install nle
 ```
 
@@ -91,7 +76,8 @@ $ pre-commit install
 
 ## Docker
 
-We have provided some docker images. Please see the [relevant README](docker/README.md).
+We have provided some docker images. Please see the [relevant
+README](docker/README.md).
 
 
 ## Trying it out
@@ -139,7 +125,7 @@ $ python -m nle.agent.agent --num_actors 80 --batch_size 32 --unroll_length 80 -
 
 Plot the mean return over the last 100 episodes:
 ```bash
-$ python -m nle.scripts.plot 
+$ python -m nle.scripts.plot
 ```
 ```
                               averaged episode return
@@ -190,12 +176,16 @@ $ python -m nle.scripts.plot
 If you use NLE in any of your work, please cite:
 
 ```
-@misc{kuttler2020nethack,
-    title={The NetHack Learning Environment},
-    author={Heinrich K{\"u}ttler and Nantas Nardelli and Alexander H. Miller and Roberta Raileanu and Marco Selvatici and Edward Grefenstette and Tim Rockt{\"a}schel},
-    year={2020},
-    eprint={2006.13760},
-    archivePrefix={arXiv},
-    primaryClass={cs.LG}
+@inproceedings{kuettler2020nethack,
+  author    = {Heinrich K{\"{u}}ttler and
+               Nantas Nardelli and
+               Alexander H. Miller and
+               Roberta Raileanu and
+               Marco Selvatici and
+               Edward Grefenstette and
+               Tim Rockt{\"{a}}schel},
+  title     = {{The NetHack Learning Environment}},
+  booktitle = {Proceedings of the Conference on Neural Information Processing Systems (NeurIPS)},
+  year      = {2020},
 }
 ```
