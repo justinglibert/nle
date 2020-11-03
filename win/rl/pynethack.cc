@@ -116,7 +116,7 @@ class Nethack
                 py::object program_state, py::object internal,
                 py::object inv_glyphs, py::object inv_letters,
                 py::object inv_oclasses, py::object inv_strs,
-                py::object screen_descriptions)
+                py::object screen_descriptions, py::object killer_name)
     {
         std::vector<ssize_t> dungeon{ ROWNO, COLNO - 1 };
         obs_.glyphs = checked_conversion<int16_t>(glyphs, dungeon);
@@ -141,6 +141,7 @@ class Nethack
         obs_.screen_descriptions = checked_conversion<uint8_t>(
             screen_descriptions,
             { ROWNO, COLNO - 1, NLE_SCREEN_DESCRIPTION_LENGTH });
+        obs_.killer_name = checked_conversion<uint8_t>(killer_name, { 256 });
 
         py_buffers_ = { std::move(glyphs),
                         std::move(chars),
@@ -154,7 +155,9 @@ class Nethack
                         std::move(inv_letters),
                         std::move(inv_oclasses),
                         std::move(inv_strs),
-                        std::move(screen_descriptions) };
+                        std::move(screen_descriptions),
+                        std::move(killer_name),
+        };
     }
 
     void
@@ -251,7 +254,9 @@ PYBIND11_MODULE(_pynethack, m)
              py::arg("inv_letters") = py::none(),
              py::arg("inv_oclasses") = py::none(),
              py::arg("inv_strs") = py::none(),
-             py::arg("screen_descriptions") = py::none())
+             py::arg("screen_descriptions") = py::none(),
+             py::arg("killer_name") = py::none()
+        )
         .def("close", &Nethack::close)
         .def("set_initial_seeds", &Nethack::set_initial_seeds)
         .def("set_seeds", &Nethack::set_seeds)
@@ -271,6 +276,8 @@ PYBIND11_MODULE(_pynethack, m)
     mn.attr("NLE_SCREEN_DESCRIPTION_LENGTH") =
         py::int_(NLE_SCREEN_DESCRIPTION_LENGTH);
 
+    mn.attr("NLE_KILLER_NAME_LENGTH") =
+        py::int_(NLE_KILLER_NAME_LENGTH);
     /* NetHack constants. */
     mn.attr("ROWNO") = py::int_(ROWNO);
     mn.attr("COLNO") = py::int_(COLNO);

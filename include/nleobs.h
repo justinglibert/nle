@@ -8,6 +8,7 @@
 #define NLE_INTERNAL_SIZE 7
 #define NLE_INVENTORY_SIZE 55
 #define NLE_INVENTORY_STR_LENGTH 80
+#define NLE_KILLER_NAME_LENGTH 256
 #define NLE_SCREEN_DESCRIPTION_LENGTH 80
 
 typedef struct nle_observation {
@@ -23,6 +24,7 @@ typedef struct nle_observation {
     int *program_state;      /* NLE_PROGRAM_STATE_SIZE */
     int *internal;           /* NLE_INTERNAL_SIZE */
     short *inv_glyphs;       /* NLE_INVENTORY_SIZE */
+    unsigned char *killer_name;
     unsigned char
         *inv_strs; /* NLE_INVENTORY_SIZE * NLE_INVENTORY_STR_LENGTH */
     unsigned char *inv_letters;  /* NLE_INVENTORY_SIZE */

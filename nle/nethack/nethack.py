@@ -16,6 +16,7 @@ DUNGEON_SHAPE = (21, 79)
 BLSTATS_SHAPE = (_pynethack.nethack.NLE_BLSTATS_SIZE,)
 MESSAGE_SHAPE = (_pynethack.nethack.NLE_MESSAGE_SIZE,)
 PROGRAM_STATE_SHAPE = (_pynethack.nethack.NLE_PROGRAM_STATE_SIZE,)
+KILLER_NAME_SHAPE = (_pynethack.nethack.NLE_KILLER_NAME_LENGTH,)
 INTERNAL_SHAPE = (_pynethack.nethack.NLE_INTERNAL_SIZE,)
 INV_SIZE = (_pynethack.nethack.NLE_INVENTORY_SIZE,)
 INV_STRS_SHAPE = (
@@ -40,6 +41,7 @@ OBSERVATION_DESC = {
     "inv_oclasses": dict(shape=INV_SIZE, dtype=np.uint8),
     "inv_strs": dict(shape=INV_STRS_SHAPE, dtype=np.uint8),
     "screen_descriptions": dict(shape=SCREEN_DESCRIPTIONS_SHAPE, dtype=np.uint8),
+    "killer_name": dict(shape=KILLER_NAME_SHAPE, dtype=np.uint8),
 }
 
 

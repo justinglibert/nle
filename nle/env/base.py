@@ -94,7 +94,8 @@ class NLE(gym.Env):
             "killer_name",
             "deepest_lev",
             "episode",
-            "seeds",
+            "seed_core",
+            "seed_disp",
             "ttyrec",
         ),
     )
@@ -117,6 +118,7 @@ class NLE(gym.Env):
             "inv_letters",
             "inv_oclasses",
             "screen_descriptions",
+            "killer_name"
         ),
         actions=None,
         options=None,
@@ -194,6 +196,7 @@ class NLE(gym.Env):
             "message",
             "program_state",
             "internal",
+            "killer_name"
         ):
             if key not in self._observation_keys:
                 self._observation_keys.append(key)
@@ -256,6 +259,11 @@ class NLE(gym.Env):
                 low=np.iinfo(np.uint8).min,
                 high=np.iinfo(np.uint8).max,
                 **nethack.OBSERVATION_DESC["message"],
+            ),
+            "killer_name": gym.spaces.Box(
+                low=np.iinfo(np.uint8).min,
+                high=np.iinfo(np.uint8).max,
+                **nethack.OBSERVATION_DESC["killer_name"],
             ),
             "program_state": gym.spaces.Box(
                 low=np.iinfo(np.int32).min,
@@ -370,6 +378,10 @@ class NLE(gym.Env):
         # super()
         obs = self._get_complete_observation(observation)
         seeds = self.get_seeds()
+        kn = bytes(obs["killer_name"])
+        killer_name = kn[: kn.index(b"\0")].decode("utf-8")
+        if killer_name == "":
+            killer_name = "unknown"
         return NLE.Stats(
             end_status=int(end_status),
             score=obs["blstats"][9],
@@ -380,7 +392,7 @@ class NLE(gym.Env):
             exp_lev=obs["blstats"][18],
             gold=obs["blstats"][13],
             hunger=obs["blstats"][21],
-            killer_name=obs["internal"][6],
+            killer_name=killer_name,
             deepest_lev=obs["internal"][0],
             episode=self._episode,
             seed_core=seeds[0],

@@ -253,13 +253,19 @@ NetHackRL::fill_obs(nle_obs *obs)
         obs->internal[3] = xwaitingforspace;
         obs->internal[4] = stairs_down;
         obs->internal[5] = nle_seeds[0]; /* core */
-        if (program_state.gameover && killer.name[0] != 0){
-            obs->internal[6] = killer.name[0]; /* disp */
-        } else {
-            obs->internal[6] = 0; /* disp */
+        obs->internal[6] = nle_seeds[1]; /* core */
+        //if (killer.name[0] != 0){
+        //    printf("%s", killer.name);
+        //    obs->internal[6] = 1; /* disp */
+        //} else {
+        //    obs->internal[6] = 69; /* disp */
+        //}
+    }
+    if (obs->killer_name) {
+        if (killer.name[0] != 0){
+            std::strncpy((char *) &obs->killer_name[0], killer.name, 256);
         }
     }
-
     if ((!program_state.something_worth_saving && !program_state.in_moveloop)
         || !iflags.window_inited) {
         // Game not yet started (!something_worth_saving && !in_moveloop -- we
